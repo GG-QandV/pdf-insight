@@ -1,0 +1,20 @@
+name = "pdf-insight-api"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+# Public, non-secret settings. Secrets (GEMINI_API_KEY / OPENAI_API_KEY) are set with
+# `wrangler secret put GEMINI_API_KEY` and never committed.
+[vars]
+LLM_PROVIDER = "gemini"
+GEMINI_MODEL = "gemini-2.5-flash"
+# CORS allow-list: the GitHub Pages origin + local dev.
+ALLOWED_ORIGINS = "https://gg-qandv.github.io,http://localhost:5173,http://localhost:4173"
+
+# 10 analyses per minute per IP (Workers Rate Limiting binding).
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
