@@ -1,4 +1,4 @@
-import { complete, parseModelJson, type ChatTurn, type Env } from './llm';
+import { complete, parseModelJson, type CallOptions, type ChatTurn, type Env } from './llm';
 import { retryMessage } from './prompt';
 
 export class InvalidAiResponseError extends Error {
@@ -19,11 +19,12 @@ export async function callValidated<T>(
   system: string,
   turn: ChatTurn,
   check: Check<T>,
+  options: CallOptions = {},
 ): Promise<T> {
   const turns: ChatTurn[] = [turn];
   let issues: string[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
-    const { text, model } = await complete(env, system, turns);
+    const { text, model } = await complete(env, system, turns, options);
     models.add(model);
     const result = check(parseModelJson(text));
     if (result.ok) return result.value;

@@ -75,19 +75,25 @@ export async function analyzeDocument(env: Env, req: AnalyzeRequest): Promise<In
       SYSTEM_PROMPT,
       { role: 'user', text: wrapDocument(chunk.text, req) },
       (raw) => validateFull(raw, req, leaks),
+      { reasoning: true },
     );
   } else {
     // F-08: analyse each part, merge lists deterministically, synthesise summary with one more call.
     const partials = await mapLimited(chunks, PARALLEL, async (chunk) => {
-      const { text, model } = await complete(env, PARTIAL_SYSTEM_PROMPT, [
-        {
-          role: 'user',
-          text: wrapDocument(chunk.text, {
-            ...req,
-            part: `${chunk.index + 1}/${chunks.length} (strony ${chunk.pages[0]}–${chunk.pages.at(-1)})`,
-          }),
-        },
-      ]);
+      const { text, model } = await complete(
+        env,
+        PARTIAL_SYSTEM_PROMPT,
+        [
+          {
+            role: 'user',
+            text: wrapDocument(chunk.text, {
+              ...req,
+              part: `${chunk.index + 1}/${chunks.length} (strony ${chunk.pages[0]}–${chunk.pages.at(-1)})`,
+            }),
+          },
+        ],
+        { reasoning: true },
+      );
       models.add(model);
       return normalizeInsight(parseModelJson(text), req) as unknown as PartialResult;
     });
@@ -115,6 +121,7 @@ export async function analyzeDocument(env: Env, req: AnalyzeRequest): Promise<In
           leaks,
         );
       },
+      { reasoning: true },
     );
   }
 

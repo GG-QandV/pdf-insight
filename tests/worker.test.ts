@@ -186,3 +186,32 @@ describe('LLM provider fallback', () => {
     });
   });
 });
+
+describe('Gemini thinking budget', () => {
+  const ok = { candidates: [{ content: { parts: [{ text: '{}' }] } }] };
+  const budgetOf = (init: RequestInit) =>
+    (
+      JSON.parse(String(init.body)) as {
+        generationConfig: { thinkingConfig: { thinkingBudget: number } };
+      }
+    ).generationConfig.thinkingConfig.thinkingBudget;
+
+  it('uses the budget only for reasoning (analysis) calls', async () => {
+    const seen: number[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: RequestInit) => {
+        seen.push(budgetOf(init));
+        return Response.json(ok);
+      }),
+    );
+    const env = { GEMINI_API_KEY: 'g', GEMINI_THINKING_BUDGET: '1024' };
+    await complete(env, 's', [{ role: 'user', text: 't' }]);
+    await complete(env, 's', [{ role: 'user', text: 't' }], { reasoning: true });
+    await complete({ GEMINI_API_KEY: 'g' }, 's', [{ role: 'user', text: 't' }], {
+      reasoning: true,
+    });
+    expect(seen).toEqual([0, 1024, 0]);
+    vi.unstubAllGlobals();
+  });
+});

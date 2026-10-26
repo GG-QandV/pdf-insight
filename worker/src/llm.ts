@@ -3,6 +3,8 @@ import type { PageImage } from './request';
 export interface Env {
   GEMINI_API_KEY?: string;
   GEMINI_MODEL?: string;
+  // Thinking tokens for the ANALYSIS calls (OCR never thinks). "0" = off (fastest).
+  GEMINI_THINKING_BUDGET?: string;
   // Any OpenAI-compatible API (optional, e.g. OpenRouter or a local mock for tests).
   OPENAI_API_KEY?: string;
   OPENAI_BASE_URL?: string;
@@ -62,6 +64,7 @@ async function postJson(
 async function geminiComplete(
   apiKey: string,
   model: string,
+  thinkingBudget: number,
   system: string,
   turns: ChatTurn[],
 ): Promise<string> {
@@ -83,7 +86,7 @@ async function geminiComplete(
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0.1,
-        thinkingConfig: { thinkingBudget: 0 },
+        thinkingConfig: { thinkingBudget },
       },
     },
   )) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
@@ -133,7 +136,17 @@ async function openAiComplete(
 
 interface Provider {
   model: string;
-  call: (system: string, turns: ChatTurn[]) => Promise<string>;
+  call: (system: string, turns: ChatTurn[], options: CallOptions) => Promise<string>;
+}
+
+export interface CallOptions {
+  /** Allow the model to "think" before answering (analysis only; slower, fewer mixed-up facts). */
+  reasoning?: boolean;
+}
+
+function thinkingBudget(env: Env): number {
+  const n = Number(env.GEMINI_THINKING_BUDGET ?? '0');
+  return Number.isInteger(n) && n > 0 ? Math.min(n, 8192) : 0;
 }
 
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
@@ -145,7 +158,10 @@ export function providers(env: Env): Provider[] {
   if (env.GEMINI_API_KEY) {
     const key = env.GEMINI_API_KEY;
     const model = env.GEMINI_MODEL ?? 'gemini-2.5-flash';
-    list.push({ model, call: (s, t) => geminiComplete(key, model, s, t) });
+    list.push({
+      model,
+      call: (s, t, o) => geminiComplete(key, model, o.reasoning ? thinkingBudget(env) : 0, s, t),
+    });
   }
   if (env.OPENAI_API_KEY && env.OPENAI_BASE_URL && env.OPENAI_MODEL) {
     const { OPENAI_API_KEY: key, OPENAI_BASE_URL: base, OPENAI_MODEL: model } = env;
@@ -171,13 +187,18 @@ export interface Completion {
  * Tries providers in order; a provider that is rate-limited, times out or fails
  * hands the request to the next one. Only the last error reaches the user.
  */
-export async function complete(env: Env, system: string, turns: ChatTurn[]): Promise<Completion> {
+export async function complete(
+  env: Env,
+  system: string,
+  turns: ChatTurn[],
+  options: CallOptions = {},
+): Promise<Completion> {
   const list = providers(env);
   if (list.length === 0) throw new LlmError('AI_CONFIG', 'No LLM provider configured');
   let lastError: LlmError = new LlmError('AI_UPSTREAM', 'No provider succeeded');
   for (const provider of list) {
     try {
-      return { text: await provider.call(system, turns), model: provider.model };
+      return { text: await provider.call(system, turns, options), model: provider.model };
     } catch (err) {
       lastError = err instanceof LlmError ? err : new LlmError('AI_UPSTREAM', 'LLM call failed');
     }

@@ -114,6 +114,7 @@ Kontrole jakości: `npm run lint`, `npm run typecheck`, `npm test`, `npm run bui
 | `VITE_BASE`                                           | SPA                       | ścieżka GitHub Pages, domyślnie `/pdf-insight/`                          |
 | `GEMINI_API_KEY`                                      | Worker — **sekret**       | klucz Google AI Studio                                                   |
 | `GEMINI_MODEL`                                        | Worker (`wrangler.toml`)  | domyślnie `gemini-2.5-flash`                                             |
+| `GEMINI_THINKING_BUDGET`                              | Worker (`wrangler.toml`)  | tokeny „myślenia” dla kroku analizy (OCR zawsze 0); `0` = wyłączone      |
 | `GROQ_API_KEY` / `_2` / `_3`                          | Worker — **sekret**       | fallback: trzy konta Groq, w tej kolejności                              |
 | `GROQ_MODEL`                                          | Worker (`wrangler.toml`)  | domyślnie `meta-llama/llama-4-scout-17b-16e-instruct` (obsługuje obrazy) |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` | Worker — sekret/vars      | opcjonalnie dowolne API zgodne z OpenAI (np. OpenRouter)                 |
@@ -134,6 +135,10 @@ Kontrole jakości: `npm run lint`, `npm run typecheck`, `npm test`, `npm run bui
 - Bardzo długie dokumenty: analizowane jest maks. 8 fragmentów (~360 tys. znaków); reszta jest pomijana
   z ostrzeżeniem.
 - Kolejność tekstu w układach wielokolumnowych zależy od pdf.js — kolumny mogą się przeplatać.
+- Model może przypisać prawdziwą datę lub kwotę z dokumentu do niewłaściwego faktu (przykład z testowej
+  umowy: koniec starego abonamentu podany jako 2026-03-31 zamiast 2027-03-31 — data 31.03.2026 istnieje
+  w dokumencie, ale dotyczy innego zadania). Walidacja schematu tego nie wykryje; ogranicza to
+  „myślenie” modelu (`GEMINI_THINKING_BUDGET`), ale nie eliminuje — wyniki warto zweryfikować.
 - Licznik zdań jest heurystyczny; nietypowe skróty mogą spowodować ponowną próbę modelu.
 - Detekcja prompt injection jest heurystyczna (wzorce PL/EN/RU/UK) — główną ochroną jest konstrukcja promptu.
 - Darmowy limit Gemini ogranicza liczbę analiz na minutę; wtedy analizę przejmuje Groq, którego modele
