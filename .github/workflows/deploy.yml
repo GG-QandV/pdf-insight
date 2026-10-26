@@ -32,7 +32,8 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          # Public Worker URL (not a secret); a repository variable overrides it.
+          VITE_API_URL: ${{ vars.VITE_API_URL || 'https://pdf-insight-api.gg-e-067-fammy-pet.workers.dev' }}
           VITE_BASE: /${{ github.event.repository.name }}/
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request'

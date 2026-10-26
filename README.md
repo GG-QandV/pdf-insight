@@ -4,7 +4,7 @@ Aplikacja webowa, która wczytuje plik PDF, tworzy jego krótkie podsumowanie (3
 dokumentu) i zamienia treść w uporządkowane dane JSON zgodne ze schematem z briefu.
 
 **Demo:** https://gg-qandv.github.io/pdf-insight/
-**API:** Cloudflare Worker (`worker/`), adres w zmiennej `VITE_API_URL`
+**API:** https://pdf-insight-api.gg-e-067-fammy-pet.workers.dev (Cloudflare Worker, kod w `worker/`)
 
 ![Zrzut ekranu — wynik analizy testowej umowy](docs/screenshot.png)
 
