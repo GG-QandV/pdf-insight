@@ -1,5 +1,6 @@
 import { describeIssues, insightSchema, type Insight } from '../../shared/schema';
 import { normalizeInsight } from '../../shared/normalize';
+import { splitSentences } from '../../shared/sentences';
 import { chunkPages } from './chunk';
 import { applyDecision, findInjections, leaksInto } from './injection';
 import { complete, parseModelJson, type Env } from './llm';
@@ -37,7 +38,20 @@ function validateFull(
 ): ReturnType<Check<Insight>> {
   const normalized = normalizeInsight(raw, { fileName: req.fileName, pages: req.pages });
   const parsed = insightSchema.safeParse(normalized);
-  if (!parsed.success) return { ok: false, issues: describeIssues(parsed.error) };
+  if (!parsed.success) {
+    const issues = describeIssues(parsed.error);
+    const summary = (normalized as { summary?: unknown }).summary;
+    // Show the model how its summary was split, so the single retry can fix it precisely.
+    if (typeof summary === 'string' && issues.some((i) => i.startsWith('summary:'))) {
+      const parts = splitSentences(summary);
+      issues.push(
+        `summary has ${parts.length} sentences by our count: ` +
+          parts.map((p, n) => `(${n + 1}) ${p}`).join(' ') +
+          ' — rewrite it as exactly 4 sentences.',
+      );
+    }
+    return { ok: false, issues };
+  }
   if (leaks(`${parsed.data.summary}\n${parsed.data.keyPoints.join('\n')}`)) {
     return {
       ok: false,

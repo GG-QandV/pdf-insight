@@ -37,26 +37,31 @@ const ABBREVIATIONS = new Set([
   'i.e',
 ]);
 
-export function countSentences(text: string): number {
+/** Splits text into sentences using the same rules as the validator. */
+export function splitSentences(text: string): string[] {
   const normalized = text.replace(/\s+/g, ' ').trim();
-  if (normalized === '') return 0;
+  if (normalized === '') return [];
 
-  let count = 0;
+  const out: string[] = [];
   let start = 0;
   const terminator = /[.!?…]+(?=\s+[\p{Lu}\d„"(]|\s*$)/gu;
   let match: RegExpExecArray | null;
   while ((match = terminator.exec(normalized)) !== null) {
-    const end = match.index;
-    const before = normalized.slice(start, end);
+    const before = normalized.slice(start, match.index);
     const lastToken = (before.split(' ').pop() ?? '').toLowerCase();
     const isAbbreviation =
       match[0] === '.' && (ABBREVIATIONS.has(lastToken) || /^\p{L}$/u.test(lastToken));
     const atEnd = match.index + match[0].length >= normalized.length;
     if (!isAbbreviation || atEnd) {
-      count += 1;
+      out.push(normalized.slice(start, match.index + match[0].length).trim());
       start = match.index + match[0].length;
     }
   }
-  if (normalized.slice(start).trim() !== '') count += 1;
-  return count;
+  const rest = normalized.slice(start).trim();
+  if (rest !== '') out.push(rest);
+  return out;
+}
+
+export function countSentences(text: string): number {
+  return splitSentences(text).length;
 }

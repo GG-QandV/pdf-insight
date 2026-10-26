@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countSentences } from '../shared/sentences';
+import { countSentences, splitSentences } from '../shared/sentences';
 
 describe('countSentences', () => {
   it('counts simple sentences', () => {
@@ -14,5 +14,14 @@ describe('countSentences', () => {
 
   it('handles empty text', () => {
     expect(countSentences('   ')).toBe(0);
+  });
+});
+
+describe('splitSentences', () => {
+  it('returns the sentences the validator counts', () => {
+    expect(splitSentences('Umowa zawarta przez ul. Portowa 18. Druga część!')).toEqual([
+      'Umowa zawarta przez ul. Portowa 18.',
+      'Druga część!',
+    ]);
   });
 });
