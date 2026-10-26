@@ -89,6 +89,10 @@ export function uniqueStrings(values: unknown, limit = 50): string[] {
   return out;
 }
 
+/** Safety caps: the prompt asks for fewer, these only bound a model that ignores it. */
+export const MAX_AMOUNTS = 15;
+export const MAX_DATES = 15;
+
 export interface NormalizeContext {
   fileName: string;
   pages: number;
@@ -125,27 +129,31 @@ export function normalizeInsight(raw: unknown, ctx: NormalizeContext): Record<st
       organizations: uniqueStrings(entities.organizations),
       people: uniqueStrings(entities.people),
     },
-    amounts: amounts.flatMap((a) => {
-      if (!isRecord(a)) return [];
-      const value = parseAmount(a.value);
-      const currency = normalizeCurrency(a.currency);
-      const context = cleanString(a.context);
-      if (value === null || currency === null || context === null) return [];
-      const key = `${value}|${currency}|${context.toLocaleLowerCase()}`;
-      if (seenAmounts.has(key)) return [];
-      seenAmounts.add(key);
-      return [{ value, currency, context }];
-    }),
-    dates: dates.flatMap((d) => {
-      if (!isRecord(d)) return [];
-      const date = normalizeDate(d.date);
-      const context = cleanString(d.context);
-      if (date === null || context === null) return [];
-      const key = `${date}|${context.toLocaleLowerCase()}`;
-      if (seenDates.has(key)) return [];
-      seenDates.add(key);
-      return [{ date, context }];
-    }),
+    amounts: amounts
+      .flatMap((a) => {
+        if (!isRecord(a)) return [];
+        const value = parseAmount(a.value);
+        const currency = normalizeCurrency(a.currency);
+        const context = cleanString(a.context);
+        if (value === null || currency === null || context === null) return [];
+        const key = `${value}|${currency}|${context.toLocaleLowerCase()}`;
+        if (seenAmounts.has(key)) return [];
+        seenAmounts.add(key);
+        return [{ value, currency, context }];
+      })
+      .slice(0, MAX_AMOUNTS),
+    dates: dates
+      .flatMap((d) => {
+        if (!isRecord(d)) return [];
+        const date = normalizeDate(d.date);
+        const context = cleanString(d.context);
+        if (date === null || context === null) return [];
+        const key = `${date}|${context.toLocaleLowerCase()}`;
+        if (seenDates.has(key)) return [];
+        seenDates.add(key);
+        return [{ date, context }];
+      })
+      .slice(0, MAX_DATES),
     keywords: uniqueStrings(r.keywords, 15),
   };
 }

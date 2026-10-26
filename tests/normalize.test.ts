@@ -102,3 +102,25 @@ describe('normalizeInsight', () => {
     expect(out.amounts).toEqual([]);
   });
 });
+
+describe('list caps', () => {
+  it('bounds amounts and dates when the model returns too many', () => {
+    const raw = {
+      amounts: Array.from({ length: 44 }, (_, i) => ({
+        value: i + 1,
+        currency: 'PLN',
+        context: `k${i}`,
+      })),
+      dates: Array.from({ length: 27 }, (_, i) => ({
+        date: `2026-01-${String((i % 28) + 1).padStart(2, '0')}`,
+        context: `d${i}`,
+      })),
+    };
+    const out = normalizeInsight(raw, { fileName: 'a.pdf', pages: 1 }) as {
+      amounts: unknown[];
+      dates: unknown[];
+    };
+    expect(out.amounts).toHaveLength(15);
+    expect(out.dates).toHaveLength(15);
+  });
+});
