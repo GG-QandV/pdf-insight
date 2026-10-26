@@ -41,7 +41,7 @@ Decyzje architektoniczne i ich uzasadnienie są opisane w README.
 
 ## Co sprawdziłem ręcznie
 
-- Żywe API (Gemini 2.5 Flash) na testowej umowie: HTTP 200, ~20 s przed poprawką limitów; podsumowanie 4 zdania po polsku, uwzględnia Aneks nr 1 ze skanu (135 użytkowników, abonament 13 100 PLN od 01.04.2027); polecenie ze strony 4 zignorowane.
+- Żywe API (Gemini 2.5 Flash) na testowej umowie: HTTP 200, ~20 s przed poprawką limitów i ~8 s po niej (12 kwot, 10 dat, posortowane wg ważności); podsumowanie 4 zdania po polsku, uwzględnia Aneks nr 1 ze skanu (135 użytkowników, abonament 13 100 PLN od 01.04.2027); polecenie ze strony 4 zignorowane.
 
 - Testowa umowa (12 stron): strona 11 wykryta jako skan i wysłana jako obraz; ostrzeżenie o poleceniu
   dla AI ze strony 4; kwoty „184 500,00 zł” → `184500`, `PLN`.
