@@ -440,3 +440,65 @@ td.num {
   margin-top: 32px;
   text-align: center;
 }
+
+.security {
+  border: 2px solid var(--danger);
+  background: var(--danger-soft);
+}
+
+.security h2 {
+  color: var(--danger);
+}
+
+.security h2:focus {
+  outline: none;
+}
+
+.security--review h2:focus-visible {
+  outline: 3px solid var(--focus);
+}
+
+.findings {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.finding__where {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.security blockquote {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 4px solid var(--danger);
+  background: var(--surface);
+  border-radius: 0 6px 6px 0;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
+.security__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin: 0 0 10px;
+}
+
+.security__facts dt {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.security__facts dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.security details summary {
+  cursor: pointer;
+  margin-bottom: 8px;
+}

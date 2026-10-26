@@ -11,11 +11,11 @@ GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 # CORS allow-list: the GitHub Pages origin + local dev.
 ALLOWED_ORIGINS = "https://gg-qandv.github.io,http://localhost:5173,http://localhost:4173"
 
-# 10 analyses per minute per IP (Workers Rate Limiting binding).
+# 20 requests per minute per IP (one analysis = /api/prepare + /api/analyze) (Workers Rate Limiting binding).
 [[ratelimits]]
 name = "RATE_LIMITER"
 namespace_id = "1001"
 
   [ratelimits.simple]
-  limit = 10
+  limit = 20
   period = 60

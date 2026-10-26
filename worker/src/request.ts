@@ -8,13 +8,17 @@ export const LIMITS = {
   maxPages: 2000,
 } as const;
 
-export const analyzeRequestSchema = z.object({
+const base = {
   fileName: z.string().trim().min(1).max(255),
   pages: z.number().int().min(1).max(LIMITS.maxPages),
-  pageTexts: z
-    .array(z.object({ page: z.number().int().min(1), text: z.string() }))
-    .min(1)
-    .max(LIMITS.maxPages),
+};
+
+const pageTexts = <T extends z.ZodTypeAny>(item: T) => z.array(item).min(1).max(LIMITS.maxPages);
+
+/** Step 1 (/api/prepare): text layer + images of scanned pages. */
+export const prepareRequestSchema = z.object({
+  ...base,
+  pageTexts: pageTexts(z.object({ page: z.number().int().min(1), text: z.string() })),
   images: z
     .array(
       z.object({
@@ -30,5 +34,24 @@ export const analyzeRequestSchema = z.object({
     .default([]),
 });
 
+/** Step 2 (/api/analyze): full text (incl. OCR) + the user's decision on suspicious fragments. */
+export const analyzeRequestSchema = z.object({
+  ...base,
+  pageTexts: pageTexts(
+    z.object({
+      page: z.number().int().min(1),
+      text: z.string(),
+      source: z.enum(['text', 'ocr']).default('text'),
+    }),
+  ),
+  ocrPages: z.array(z.number().int().min(1)).max(LIMITS.maxImages).default([]),
+  injectionDecision: z.enum(['exclude', 'include']).default('exclude'),
+});
+
+export type PrepareRequest = z.infer<typeof prepareRequestSchema>;
 export type AnalyzeRequest = z.infer<typeof analyzeRequestSchema>;
-export type PageImage = AnalyzeRequest['images'][number];
+export type PageImage = PrepareRequest['images'][number];
+
+export function totalChars(texts: { text: string }[]): number {
+  return texts.reduce((n, p) => n + p.text.length, 0);
+}

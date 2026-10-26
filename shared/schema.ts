@@ -49,6 +49,26 @@ export const metaSchema = z.object({
   generatedAt: z.string(),
 });
 
+export const injectionFindingSchema = z.object({
+  page: z.number().int().min(1),
+  source: z.enum(['text', 'ocr']),
+  excerpt: z.string(),
+});
+
+/**
+ * Extra, optional block: result of the prompt-injection checks.
+ * decision — what the user chose for the suspicious fragments before the analysis;
+ * outputCheck — whether the final summary repeats content of those fragments.
+ */
+export const securitySchema = z.object({
+  promptInjection: z.object({
+    detected: z.boolean(),
+    decision: z.enum(['excluded', 'included', 'none']),
+    findings: z.array(injectionFindingSchema),
+    outputCheck: z.enum(['passed', 'failed', 'not-applicable']),
+  }),
+});
+
 export const insightSchema = z.object({
   document: documentSchema,
   summary: nonEmpty.refine((text) => {
@@ -64,11 +84,14 @@ export const insightSchema = z.object({
   dates: z.array(dateEntrySchema),
   keywords: z.array(nonEmpty),
   meta: metaSchema.optional(),
+  security: securitySchema.optional(),
 });
 
 export type Insight = z.infer<typeof insightSchema>;
 export type InsightDocument = z.infer<typeof documentSchema>;
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
+export type InjectionFinding = z.infer<typeof injectionFindingSchema>;
+export type Security = z.infer<typeof securitySchema>;
 
 /** Human-readable list of validation problems (used for the single retry prompt). */
 export function describeIssues(error: z.ZodError): string[] {

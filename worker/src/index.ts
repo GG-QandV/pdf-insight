@@ -1,6 +1,9 @@
-import { analyzeDocument, InvalidAiResponseError } from './analyze';
+import type { z } from 'zod';
+import { analyzeDocument, LEAK_ISSUE } from './analyze';
 import { LlmError, type Env } from './llm';
-import { analyzeRequestSchema, LIMITS } from './request';
+import { prepareDocument } from './prepare';
+import { analyzeRequestSchema, LIMITS, prepareRequestSchema, totalChars } from './request';
+import { InvalidAiResponseError } from './validated';
 
 /** Error codes are mapped to Polish messages in the SPA (src/lib/messages.ts). */
 type ErrorCode =
@@ -11,6 +14,7 @@ type ErrorCode =
   | 'AI_BUSY'
   | 'AI_TIMEOUT'
   | 'AI_INVALID'
+  | 'AI_INJECTED'
   | 'AI_UPSTREAM'
   | 'AI_CONFIG'
   | 'NOT_FOUND';
@@ -56,7 +60,7 @@ function fail(
 
 // Fallback limiter when the Rate Limiting binding is not configured (per isolate, best effort).
 const memoryHits = new Map<string, number[]>();
-function memoryLimit(key: string, limit = 10, windowMs = 60_000): boolean {
+function memoryLimit(key: string, limit = 20, windowMs = 60_000): boolean {
   const now = Date.now();
   const hits = (memoryHits.get(key) ?? []).filter((t) => now - t < windowMs);
   hits.push(now);
@@ -73,10 +77,13 @@ async function withinRateLimit(request: Request, env: Env): Promise<boolean> {
   return memoryLimit(key);
 }
 
-async function handleAnalyze(
+/** Shared pipeline for both steps: size + rate limits, JSON + schema, error mapping. */
+async function handle<S extends z.ZodTypeAny>(
   request: Request,
   env: Env,
   cors: Record<string, string>,
+  schema: S,
+  run: (data: z.output<S>) => Promise<unknown>,
 ): Promise<Response> {
   const length = Number(request.headers.get('Content-Length') ?? '0');
   if (length > LIMITS.maxBodyBytes) return fail('TOO_LARGE', 413, cors);
@@ -91,16 +98,19 @@ async function handleAnalyze(
   } catch {
     return fail('BAD_REQUEST', 400, cors);
   }
-  const parsed = analyzeRequestSchema.safeParse(body);
+  const parsed = schema.safeParse(body);
   if (!parsed.success) return fail('BAD_REQUEST', 400, cors);
-  const totalChars = parsed.data.pageTexts.reduce((n, p) => n + p.text.length, 0);
-  if (totalChars > LIMITS.maxTextChars) return fail('TOO_LARGE', 413, cors);
+  const data = parsed.data as z.output<S>;
+  if (totalChars((data as { pageTexts: { text: string }[] }).pageTexts) > LIMITS.maxTextChars)
+    return fail('TOO_LARGE', 413, cors);
 
   try {
-    const insight = await analyzeDocument(env, parsed.data);
-    return json(insight, 200, cors);
+    return json(await run(data), 200, cors);
   } catch (err) {
-    if (err instanceof InvalidAiResponseError) return fail('AI_INVALID', 502, cors, err.issues);
+    if (err instanceof InvalidAiResponseError) {
+      const leak = err.issues.length > 0 && err.issues.every((i) => i.startsWith(LEAK_ISSUE));
+      return fail(leak ? 'AI_INJECTED' : 'AI_INVALID', 502, cors, err.issues);
+    }
     if (err instanceof LlmError) {
       const status = err.code === 'AI_BUSY' ? 503 : err.code === 'AI_TIMEOUT' ? 504 : 502;
       return fail(err.code, status, cors);
@@ -119,11 +129,19 @@ export default {
     if (url.pathname === '/api/health' && request.method === 'GET')
       return json({ ok: true }, 200, cors);
 
-    if (url.pathname === '/api/analyze' && request.method === 'POST') {
+    const step =
+      url.pathname === '/api/prepare'
+        ? 'prepare'
+        : url.pathname === '/api/analyze'
+          ? 'analyze'
+          : null;
+    if (step && request.method === 'POST') {
       // Browsers always send Origin on cross-origin POST; reject anything not on the allow-list.
       if (!origin || !allowedOrigins(env).includes(origin))
         return fail('FORBIDDEN_ORIGIN', 403, cors);
-      return handleAnalyze(request, env, cors);
+      return step === 'prepare'
+        ? handle(request, env, cors, prepareRequestSchema, (d) => prepareDocument(env, d))
+        : handle(request, env, cors, analyzeRequestSchema, (d) => analyzeDocument(env, d));
     }
     return fail('NOT_FOUND', 404, cors);
   },

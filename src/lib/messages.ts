@@ -14,6 +14,7 @@ export const t = {
   emptyText: 'Wybierz plik PDF, aby zobaczyć podsumowanie i dane.',
   readingStep: 'Odczyt tekstu z PDF…',
   ocrStep: (n: number) => `Przygotowanie ${n} zeskanowanych stron do OCR…`,
+  preparingStep: 'Odczyt skanów (OCR) i kontrola bezpieczeństwa treści…',
   analyzingStep: 'Analiza AI — to zwykle trwa kilka–kilkanaście sekund…',
   retry: 'Spróbuj ponownie',
   newFile: 'Analizuj inny plik',
@@ -40,6 +41,27 @@ export const t = {
   historyNote: 'Wyniki są zapisywane tylko w tej przeglądarce.',
   warnings: 'Uwagi',
   durationLabel: (s: string) => `Czas analizy: ${s} s`,
+  injection: {
+    reviewTitle: 'Wykryto fragment wyglądający na polecenie dla AI',
+    reviewLead:
+      'Dokument zawiera tekst, który próbuje wpłynąć na wynik analizy (tzw. prompt injection). Zdecyduj, jak go potraktować:',
+    reviewNote:
+      'Wykrywanie jest heurystyczne i może się pomylić. W obu przypadkach model ma zakaz wykonywania poleceń z dokumentu, a wynik jest sprawdzany pod kątem przejęcia treści fragmentu.',
+    exclude: 'Wyklucz fragment i analizuj (zalecane)',
+    include: 'Analizuj z fragmentem (oznaczonym jako dane)',
+    cancel: 'Anuluj',
+    where: (page: number, source: 'text' | 'ocr') =>
+      `Strona ${page} · ${source === 'ocr' ? 'tekst ze skanu (OCR)' : 'warstwa tekstowa'}`,
+    resultTitle: (pages: string) =>
+      `Wykryto próbę manipulacji AI (prompt injection) — strona ${pages}`,
+    decisionLabel: 'Decyzja',
+    excluded: 'Fragment wykluczony z analizy',
+    included: 'Fragment pozostawiony jako dane (oznaczony)',
+    outputCheckLabel: 'Kontrola wyniku',
+    outputPassed: 'Wynik nie powtarza treści fragmentu ✓',
+    outputFailed: 'Wynik może powtarzać treść fragmentu',
+    showFragments: 'Pokaż wykryte fragmenty',
+  },
   fields: {
     fileName: 'Plik',
     pages: 'Strony',
@@ -77,6 +99,8 @@ export const apiErrors: Record<string, string> = {
   AI_INVALID:
     'AI zwróciło niepoprawne dane (także po ponownej próbie). Spróbuj ponownie — wynik bywa różny.',
   AI_UPSTREAM: 'Błąd usługi AI. Spróbuj ponownie za chwilę.',
+  AI_INJECTED:
+    'Wynik powtarzał treść fragmentu wyglądającego na polecenie dla AI, więc nie został pokazany. Spróbuj ponownie i wybierz „Wyklucz fragment”.',
   AI_CONFIG: 'Usługa analizy nie jest skonfigurowana. Skontaktuj się z autorem demo.',
   NETWORK: 'Brak połączenia z serwerem analizy. Sprawdź internet i spróbuj ponownie.',
   CLIENT_TIMEOUT: 'Analiza trwała zbyt długo. Spróbuj ponownie.',

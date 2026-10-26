@@ -12,12 +12,10 @@ export interface Chunk {
 export const CHUNK_CHARS = 45_000;
 export const MAX_CHUNKS = 8;
 
-function pageBlock(p: PageText, scanned: boolean): string {
+function pageBlock(p: PageText, ocr: boolean): string {
   const body = p.text.trim();
-  if (body === '' && scanned)
-    return `[Strona ${p.page} — skan bez warstwy tekstowej, treść na obrazie]`;
   if (body === '') return `[Strona ${p.page} — pusta]`;
-  return `[Strona ${p.page}]\n${body}`;
+  return ocr ? `[Strona ${p.page} — tekst z OCR]\n${body}` : `[Strona ${p.page}]\n${body}`;
 }
 
 /** Splits a single oversized page on paragraph/line boundaries. */
@@ -41,7 +39,7 @@ function splitLong(text: string, size: number): string[] {
  */
 export function chunkPages(
   pages: PageText[],
-  scannedPages: ReadonlySet<number> = new Set(),
+  ocrPages: ReadonlySet<number> = new Set(),
   size = CHUNK_CHARS,
 ): { chunks: Chunk[]; truncated: boolean } {
   const chunks: Chunk[] = [];
@@ -53,7 +51,7 @@ export function chunkPages(
   };
 
   for (const p of [...pages].sort((a, b) => a.page - b.page)) {
-    const block = pageBlock(p, scannedPages.has(p.page));
+    const block = pageBlock(p, ocrPages.has(p.page));
     if (block.length > size) {
       flush();
       for (const piece of splitLong(block, size)) {

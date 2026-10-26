@@ -2,6 +2,7 @@ import type { Insight } from '../../shared/schema';
 import { t, typeLabels } from '../lib/messages';
 import { formatAmount, formatDate } from '../lib/format';
 import { JsonPreview } from './JsonPreview';
+import { SecurityPanel } from './SecurityPanel';
 
 function List({ items }: { items: string[] }) {
   if (items.length === 0) return <p className="muted">{t.none}</p>;
@@ -61,6 +62,8 @@ export function ResultView({ insight, durationMs }: Props) {
           </p>
         )}
       </section>
+
+      {insight.security && <SecurityPanel security={insight.security} />}
 
       {meta && meta.warnings.length > 0 && (
         <section className="card card--warn" aria-labelledby="warn-title">

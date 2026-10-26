@@ -10,25 +10,29 @@ dokumentu) i zamienia treść w uporządkowane dane JSON zgodne ze schematem z b
 
 ## Co działa
 
-| ID   | Wymaganie                    | Realizacja                                                                                                      |
-| ---- | ---------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| F-01 | Wgrywanie PDF (DnD, ≤ 10 MB) | `FileDrop` + `lib/file.ts`: typ/rozszerzenie, sygnatura `%PDF-`, rozmiar; limit również po stronie API          |
-| F-02 | Odczyt tekstu                | `lib/pdf.ts`: pdf.js w przeglądarce, tekst per strona ze znacznikami `[Strona N]`                               |
-| F-03 | Podsumowanie 3–5 zdań        | prompt + walidacja liczby zdań (`shared/sentences.ts`, odporna na skróty „ul.”, „np.”, inicjały)                |
-| F-04 | Dane wg schematu, walidowane | `shared/schema.ts` (Zod) — ta sama walidacja w Workerze **i** w przeglądarce przed wyświetleniem                |
-| F-05 | Widok i eksport              | `ResultView`, podgląd JSON, kopiowanie, pobranie `.json`                                                        |
-| F-06 | Stany interfejsu             | ładowanie (z etapami), błąd z „Spróbuj ponownie”, stan pusty                                                    |
-| F-07 | Publiczne demo               | GitHub Pages, deploy przez GitHub Actions                                                                       |
-| F-08 | Długie dokumenty             | `worker/src/chunk.ts`: fragmenty po pełnych stronach (≤ 45 tys. znaków), równoległa analiza, scalanie + synteza |
-| F-09 | Historia analiz              | `lib/history.ts`: ostatnie 10 wyników w `localStorage`, walidowane schematem przy odczycie                      |
-| F-10 | OCR                          | strony bez warstwy tekstowej są renderowane do JPEG i wysyłane do modelu multimodalnego (maks. 5 stron)         |
+| ID   | Wymaganie                    | Realizacja                                                                                                                  |
+| ---- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| F-01 | Wgrywanie PDF (DnD, ≤ 10 MB) | `FileDrop` + `lib/file.ts`: typ/rozszerzenie, sygnatura `%PDF-`, rozmiar; limit również po stronie API                      |
+| F-02 | Odczyt tekstu                | `lib/pdf.ts`: pdf.js w przeglądarce, tekst per strona ze znacznikami `[Strona N]`                                           |
+| F-03 | Podsumowanie 3–5 zdań        | prompt + walidacja liczby zdań (`shared/sentences.ts`, odporna na skróty „ul.”, „np.”, inicjały)                            |
+| F-04 | Dane wg schematu, walidowane | `shared/schema.ts` (Zod) — ta sama walidacja w Workerze **i** w przeglądarce przed wyświetleniem                            |
+| F-05 | Widok i eksport              | `ResultView`, podgląd JSON, kopiowanie, pobranie `.json`                                                                    |
+| F-06 | Stany interfejsu             | ładowanie (z etapami), błąd z „Spróbuj ponownie”, stan pusty                                                                |
+| F-07 | Publiczne demo               | GitHub Pages, deploy przez GitHub Actions                                                                                   |
+| F-08 | Długie dokumenty             | `worker/src/chunk.ts`: fragmenty po pełnych stronach (≤ 45 tys. znaków), równoległa analiza, scalanie + synteza             |
+| F-09 | Historia analiz              | `lib/history.ts`: ostatnie 10 wyników w `localStorage`, walidowane schematem przy odczycie                                  |
+| F-10 | OCR                          | strony bez warstwy tekstowej są renderowane do JPEG i przepisywane przez model multimodalny w osobnym kroku (maks. 5 stron) |
 
 ## Architektura
 
 ```
-Przeglądarka (GitHub Pages)                 Cloudflare Worker (klucz w sekretach)        LLM
-React SPA ──pdf.js──► tekst stron + obrazy skanów ──POST /api/analyze──► CORS, limity, Zod ──► Gemini 2.5 Flash
-          ◄──────────────── JSON (walidowany w Workerze i ponownie w SPA) ◄─────────────────┘
+Przeglądarka (GitHub Pages)                         Cloudflare Worker (klucze w sekretach)          LLM
+1. pdf.js: tekst stron + JPEG skanów ──POST /api/prepare──► OCR skanów (osobne wywołanie) ───────► Gemini → Groq ×3
+                                     ◄── tekst + OCR + wykryte fragmenty „poleceń dla AI”
+2. [tylko gdy coś wykryto] użytkownik: „wyklucz fragment” albo „zostaw jako dane”
+3. ──POST /api/analyze──► ponowna detekcja → wycięcie / oznaczenie <suspicious> → analiza → Zod
+                                     → kontrola wyniku (czy nie powtarza treści fragmentu) ───────► Gemini → Groq ×3
+   ◄── JSON (walidowany w Workerze i ponownie w SPA)
 ```
 
 ```
@@ -37,7 +41,7 @@ src/
   lib/          pdf.ts (pdf.js + OCR-render), file.ts, history.ts, download.ts, format.ts, messages.ts (PL)
   api/          analyze.ts — klient API + walidacja odpowiedzi
 shared/         schema.ts (Zod), normalize.ts, sentences.ts — wspólne dla SPA i Workera
-worker/src/     index.ts (routing, CORS, limity), analyze.ts, chunk.ts, merge.ts, prompt.ts, llm.ts, injection.ts
+worker/src/     index.ts (routing, CORS, limity), prepare.ts (OCR + detekcja), analyze.ts, validated.ts, chunk.ts, merge.ts, prompt.ts, llm.ts, injection.ts
 tests/          Vitest: schemat, normalizacja, zdania, chunking, scalanie, prompt injection
 ```
 
@@ -64,11 +68,22 @@ tests/          Vitest: schemat, normalizacja, zdania, chunking, scalanie, promp
 
 - Klucz API wyłącznie w sekretach Workera (`wrangler secret put`), nigdy we froncie ani w repozytorium.
 - CORS: tylko domena demo i `localhost` (`ALLOWED_ORIGINS`); `POST` z innego originu → 403.
-- Limit żądań (10/min/IP, Workers Rate Limiting), limit ciała (12 MB), tekstu (400 tys. znaków) i obrazów (5).
-- **Prompt injection:** treść PDF jest przekazywana jako dane w `<document>…</document>` (próba zamknięcia
-  znacznika z wnętrza dokumentu jest neutralizowana), prompt systemowy zabrania wykonywania poleceń z
-  dokumentu, a heurystyka `injection.ts` pokazuje ostrzeżenie w wyniku. Testowa umowa zawiera taką
-  instrukcję na stronie 4 — jest wykrywana i ignorowana.
+- Limit żądań (20/min/IP — jedna analiza to 2 żądania, Workers Rate Limiting), limit ciała (12 MB), tekstu (400 tys. znaków) i obrazów (5).
+- **Prompt injection — 4 warstwy:**
+  1. **Detekcja na całym tekście, także ze skanów.** Skany są najpierw przepisywane (OCR) w osobnym
+     wywołaniu modelu, dopiero potem heurystyka `injection.ts` (wzorce PL/EN/RU/UK) sprawdza warstwę
+     tekstową **i** tekst z OCR — polecenie ukryte w skanie nie omija kontroli.
+  2. **Decyzja człowieka.** Gdy coś wykryto, interfejs pokazuje fragment (stronę, źródło, cytat) i pyta:
+     _wyklucz fragment_ (zalecane — nie trafia do modelu) albo _zostaw jako dane_ (oznaczony
+     `<suspicious>`). Worker wykrywa fragmenty ponownie i nie ufa danym od klienta.
+  3. **Prompt:** treść w `<document>…</document>` to dane (próba zamknięcia znacznika jest neutralizowana);
+     polecenia z dokumentu, z OCR i z `<suspicious>` nie są wykonywane.
+  4. **Kontrola wyniku:** jeśli podsumowanie/punkty powtarzają 5-wyrazowy ciąg występujący tylko we
+     wrogim fragmencie, model dostaje jedną poprawkę; potem wynik jest odrzucany (`AI_INJECTED`).
+
+  Wynik trafia do JSON jako `security.promptInjection` (`detected`, `decision`, `findings`, `outputCheck`)
+  i jest pokazany w czerwonym panelu nad podsumowaniem. Testowa umowa ma taką instrukcję na stronie 4.
+
 - Bez `dangerouslySetInnerHTML` (wymuszone regułą ESLint); wszystkie wartości renderowane jako tekst.
 - Interfejs informuje, że treść pliku trafia do zewnętrznego API AI.
 
