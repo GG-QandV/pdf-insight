@@ -48,7 +48,9 @@ tests/          Vitest: schemat, normalizacja, zdania, chunking, scalanie, promp
 - **Backend: Cloudflare Worker.** Darmowy plan, brak „zimnego startu”, wbudowany Rate Limiting; łatwo
   utrzymać demo przez 14+ dni.
 - **Model: Gemini 2.5 Flash** (darmowy limit, natywny tryb JSON, obsługa obrazów → OCR bez dodatkowej
-  biblioteki). Dostawca jest wymienny: `LLM_PROVIDER=openai` + dowolne API zgodne z OpenAI.
+  biblioteki).
+- **Fallback dostawców:** Gemini → Groq (konto 1) → Groq (konto 2). Gdy dostawca zwraca limit (429),
+  błąd lub timeout, Worker przekazuje żądanie następnemu; model użyty w analizie jest zapisany w `meta.model`.
 - **Jeden schemat, dwie walidacje.** `shared/schema.ts` waliduje odpowiedź modelu w Workerze; SPA waliduje
   ją ponownie przed renderowaniem (brief F-04).
 - **Normalizacja przed walidacją.** Drobne potknięcia modelu („184 500,00”, „zł”, „12.03.2026”) są
@@ -91,15 +93,16 @@ Kontrole jakości: `npm run lint`, `npm run typecheck`, `npm test`, `npm run bui
 
 ### Zmienne środowiskowe
 
-| Zmienna                                               | Gdzie                     | Opis                                               |
-| ----------------------------------------------------- | ------------------------- | -------------------------------------------------- |
-| `VITE_API_URL`                                        | SPA (`.env`, Actions var) | adres Workera                                      |
-| `VITE_BASE`                                           | SPA                       | ścieżka GitHub Pages, domyślnie `/pdf-insight/`    |
-| `GEMINI_API_KEY`                                      | Worker — **sekret**       | klucz Google AI Studio                             |
-| `GEMINI_MODEL`                                        | Worker (`wrangler.toml`)  | domyślnie `gemini-2.5-flash`                       |
-| `LLM_PROVIDER`                                        | Worker                    | `gemini` (domyślnie) lub `openai`                  |
-| `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` | Worker — sekret/vars      | dowolne API zgodne z OpenAI (np. Groq, OpenRouter) |
-| `ALLOWED_ORIGINS`                                     | Worker (`wrangler.toml`)  | lista originów CORS                                |
+| Zmienna                                               | Gdzie                     | Opis                                                                     |
+| ----------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------ |
+| `VITE_API_URL`                                        | SPA (`.env`, Actions var) | adres Workera                                                            |
+| `VITE_BASE`                                           | SPA                       | ścieżka GitHub Pages, domyślnie `/pdf-insight/`                          |
+| `GEMINI_API_KEY`                                      | Worker — **sekret**       | klucz Google AI Studio                                                   |
+| `GEMINI_MODEL`                                        | Worker (`wrangler.toml`)  | domyślnie `gemini-2.5-flash`                                             |
+| `GROQ_API_KEY` / `GROQ_API_KEY_2`                     | Worker — **sekret**       | fallback 1 i 2 (dwa konta Groq)                                          |
+| `GROQ_MODEL`                                          | Worker (`wrangler.toml`)  | domyślnie `meta-llama/llama-4-scout-17b-16e-instruct` (obsługuje obrazy) |
+| `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` | Worker — sekret/vars      | opcjonalnie dowolne API zgodne z OpenAI (np. OpenRouter)                 |
+| `ALLOWED_ORIGINS`                                     | Worker (`wrangler.toml`)  | lista originów CORS                                                      |
 
 ### Deploy
 
@@ -118,7 +121,8 @@ Kontrole jakości: `npm run lint`, `npm run typecheck`, `npm test`, `npm run bui
 - Kolejność tekstu w układach wielokolumnowych zależy od pdf.js — kolumny mogą się przeplatać.
 - Licznik zdań jest heurystyczny; nietypowe skróty mogą spowodować ponowną próbę modelu.
 - Detekcja prompt injection jest heurystyczna (wzorce PL/EN/RU/UK) — główną ochroną jest konstrukcja promptu.
-- Darmowy limit Gemini ogranicza liczbę analiz na minutę; przy przekroczeniu użytkownik widzi komunikat.
+- Darmowy limit Gemini ogranicza liczbę analiz na minutę; wtedy analizę przejmuje Groq, którego modele
+  dają zwykle słabsze podsumowania. Komunikat o błędzie pojawia się dopiero, gdy limity wyczerpią wszyscy dostawcy.
 - Rate limiting Workers działa per lokalizacja Cloudflare (nie jest globalnym licznikiem).
 
 ## Praca z AI

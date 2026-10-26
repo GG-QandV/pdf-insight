@@ -1,12 +1,16 @@
 import type { PageImage } from './request';
 
 export interface Env {
-  LLM_PROVIDER?: string; // "gemini" (default) | "openai"
   GEMINI_API_KEY?: string;
   GEMINI_MODEL?: string;
+  // Any OpenAI-compatible API (optional, e.g. OpenRouter or a local mock for tests).
   OPENAI_API_KEY?: string;
   OPENAI_BASE_URL?: string;
   OPENAI_MODEL?: string;
+  // Groq fallback: two accounts, used in order when the previous provider is unavailable.
+  GROQ_API_KEY?: string;
+  GROQ_API_KEY_2?: string;
+  GROQ_MODEL?: string;
   ALLOWED_ORIGINS?: string;
   // Workers Rate Limiting binding (typed structurally so shared code needs no Workers types).
   RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
@@ -54,13 +58,16 @@ async function postJson(
   return res.json();
 }
 
-async function geminiComplete(env: Env, system: string, turns: ChatTurn[]): Promise<string> {
-  if (!env.GEMINI_API_KEY) throw new LlmError('AI_CONFIG', 'GEMINI_API_KEY missing');
-  const model = env.GEMINI_MODEL ?? 'gemini-2.5-flash';
+async function geminiComplete(
+  apiKey: string,
+  model: string,
+  system: string,
+  turns: ChatTurn[],
+): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const data = (await postJson(
     url,
-    { 'x-goog-api-key': env.GEMINI_API_KEY },
+    { 'x-goog-api-key': apiKey },
     {
       systemInstruction: { parts: [{ text: system }] },
       contents: turns.map((t) => ({
@@ -84,17 +91,22 @@ async function geminiComplete(env: Env, system: string, turns: ChatTurn[]): Prom
   return text;
 }
 
-async function openAiComplete(env: Env, system: string, turns: ChatTurn[]): Promise<string> {
-  if (!env.OPENAI_API_KEY || !env.OPENAI_BASE_URL || !env.OPENAI_MODEL) {
-    throw new LlmError('AI_CONFIG', 'OPENAI_* settings missing');
-  }
+async function openAiComplete(
+  baseUrl: string,
+  apiKey: string,
+  model: string,
+  system: string,
+  turns: ChatTurn[],
+): Promise<string> {
+  const hasImages = turns.some((t) => (t.images?.length ?? 0) > 0);
   const data = (await postJson(
-    `${env.OPENAI_BASE_URL.replace(/\/$/, '')}/chat/completions`,
-    { Authorization: `Bearer ${env.OPENAI_API_KEY}` },
+    `${baseUrl.replace(/\/$/, '')}/chat/completions`,
+    { Authorization: `Bearer ${apiKey}` },
     {
-      model: env.OPENAI_MODEL,
+      model,
       temperature: 0.1,
-      response_format: { type: 'json_object' },
+      // JSON mode is not supported together with images by every provider; the prompt still asks for JSON.
+      ...(hasImages ? {} : { response_format: { type: 'json_object' } }),
       messages: [
         { role: 'system', content: system },
         ...turns.map((t) => ({
@@ -118,16 +130,58 @@ async function openAiComplete(env: Env, system: string, turns: ChatTurn[]): Prom
   return text;
 }
 
-export function modelName(env: Env): string {
-  return env.LLM_PROVIDER === 'openai'
-    ? (env.OPENAI_MODEL ?? 'unknown')
-    : (env.GEMINI_MODEL ?? 'gemini-2.5-flash');
+interface Provider {
+  model: string;
+  call: (system: string, turns: ChatTurn[]) => Promise<string>;
 }
 
-export function complete(env: Env, system: string, turns: ChatTurn[]): Promise<string> {
-  return env.LLM_PROVIDER === 'openai'
-    ? openAiComplete(env, system, turns)
-    : geminiComplete(env, system, turns);
+const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
+const GROQ_DEFAULT_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
+
+/** Providers in priority order: Gemini → OpenAI-compatible → Groq account 1 → Groq account 2. */
+export function providers(env: Env): Provider[] {
+  const list: Provider[] = [];
+  if (env.GEMINI_API_KEY) {
+    const key = env.GEMINI_API_KEY;
+    const model = env.GEMINI_MODEL ?? 'gemini-2.5-flash';
+    list.push({ model, call: (s, t) => geminiComplete(key, model, s, t) });
+  }
+  if (env.OPENAI_API_KEY && env.OPENAI_BASE_URL && env.OPENAI_MODEL) {
+    const { OPENAI_API_KEY: key, OPENAI_BASE_URL: base, OPENAI_MODEL: model } = env;
+    list.push({ model, call: (s, t) => openAiComplete(base, key, model, s, t) });
+  }
+  const groqModel = env.GROQ_MODEL ?? GROQ_DEFAULT_MODEL;
+  for (const key of [env.GROQ_API_KEY, env.GROQ_API_KEY_2]) {
+    if (key)
+      list.push({
+        model: groqModel,
+        call: (s, t) => openAiComplete(GROQ_BASE_URL, key, groqModel, s, t),
+      });
+  }
+  return list;
+}
+
+export interface Completion {
+  text: string;
+  model: string;
+}
+
+/**
+ * Tries providers in order; a provider that is rate-limited, times out or fails
+ * hands the request to the next one. Only the last error reaches the user.
+ */
+export async function complete(env: Env, system: string, turns: ChatTurn[]): Promise<Completion> {
+  const list = providers(env);
+  if (list.length === 0) throw new LlmError('AI_CONFIG', 'No LLM provider configured');
+  let lastError: LlmError = new LlmError('AI_UPSTREAM', 'No provider succeeded');
+  for (const provider of list) {
+    try {
+      return { text: await provider.call(system, turns), model: provider.model };
+    } catch (err) {
+      lastError = err instanceof LlmError ? err : new LlmError('AI_UPSTREAM', 'LLM call failed');
+    }
+  }
+  throw lastError;
 }
 
 /** Parses the model's JSON, tolerating a ```json fence around it. */

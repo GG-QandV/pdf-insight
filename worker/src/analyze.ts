@@ -2,7 +2,7 @@ import { describeIssues, insightSchema, type Insight } from '../../shared/schema
 import { normalizeInsight } from '../../shared/normalize';
 import { chunkPages, type Chunk } from './chunk';
 import { detectInjection } from './injection';
-import { complete, modelName, parseModelJson, type ChatTurn, type Env } from './llm';
+import { complete, parseModelJson, type ChatTurn, type Env } from './llm';
 import { mergePartials, type PartialResult } from './merge';
 import {
   MERGE_SYSTEM_PROMPT,
@@ -48,6 +48,7 @@ function imagesFor(chunk: Chunk, images: PageImage[]): PageImage[] {
  */
 async function callValidated<T>(
   env: Env,
+  models: Set<string>,
   system: string,
   turn: ChatTurn,
   finish: (raw: unknown) => { ok: true; value: T } | { ok: false; issues: string[] },
@@ -55,7 +56,8 @@ async function callValidated<T>(
   const turns: ChatTurn[] = [turn];
   let issues: string[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
-    const text = await complete(env, system, turns);
+    const { text, model } = await complete(env, system, turns);
+    models.add(model);
     const result = finish(parseModelJson(text));
     if (result.ok) return result.value;
     issues = result.issues;
@@ -76,6 +78,7 @@ export async function analyzeDocument(env: Env, req: AnalyzeRequest): Promise<In
   const scanned = new Set(req.images.map((i) => i.page));
   const { chunks, truncated } = chunkPages(req.pageTexts, scanned);
   const warnings: string[] = [];
+  const models = new Set<string>();
 
   const injectionPages = detectInjection(req.pageTexts);
   if (injectionPages.length > 0) {
@@ -92,6 +95,7 @@ export async function analyzeDocument(env: Env, req: AnalyzeRequest): Promise<In
     const chunk = chunks[0] ?? { index: 0, pages: [], text: '' };
     insight = await callValidated(
       env,
+      models,
       SYSTEM_PROMPT,
       { role: 'user', text: wrapDocument(chunk.text, req), images: req.images },
       (raw) => validateFull(raw, req),
@@ -99,7 +103,7 @@ export async function analyzeDocument(env: Env, req: AnalyzeRequest): Promise<In
   } else {
     // F-08: analyse each part, merge lists deterministically, synthesise summary with one more call.
     const partials = await mapLimited(chunks, PARALLEL, async (chunk) => {
-      const text = await complete(env, PARTIAL_SYSTEM_PROMPT, [
+      const { text, model } = await complete(env, PARTIAL_SYSTEM_PROMPT, [
         {
           role: 'user',
           text: wrapDocument(chunk.text, {
@@ -109,6 +113,7 @@ export async function analyzeDocument(env: Env, req: AnalyzeRequest): Promise<In
           images: imagesFor(chunk, req.images),
         },
       ]);
+      models.add(model);
       return normalizeInsight(parseModelJson(text), req) as unknown as PartialResult;
     });
     const merged = mergePartials(partials);
@@ -119,6 +124,7 @@ export async function analyzeDocument(env: Env, req: AnalyzeRequest): Promise<In
     });
     insight = await callValidated(
       env,
+      models,
       MERGE_SYSTEM_PROMPT,
       { role: 'user', text: mergeInput },
       (raw) => {
@@ -139,7 +145,7 @@ export async function analyzeDocument(env: Env, req: AnalyzeRequest): Promise<In
   return {
     ...insight,
     meta: {
-      model: modelName(env),
+      model: [...models].join(', '),
       chunks: Math.max(chunks.length, 1),
       ocrPages: [...scanned].sort((a, b) => a - b),
       warnings,

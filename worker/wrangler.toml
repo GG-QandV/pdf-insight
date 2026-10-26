@@ -2,11 +2,12 @@ name = "pdf-insight-api"
 main = "src/index.ts"
 compatibility_date = "2025-09-01"
 
-# Public, non-secret settings. Secrets (GEMINI_API_KEY / OPENAI_API_KEY) are set with
-# `wrangler secret put GEMINI_API_KEY` and never committed.
+# Public, non-secret settings. Secrets are set with `wrangler secret put <NAME>` and never committed:
+#   GEMINI_API_KEY (primary), GROQ_API_KEY (fallback 1), GROQ_API_KEY_2 (fallback 2).
 [vars]
-LLM_PROVIDER = "gemini"
 GEMINI_MODEL = "gemini-2.5-flash"
+# Groq fallback model: multimodal, so scanned pages (OCR) still work after a fallback.
+GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 # CORS allow-list: the GitHub Pages origin + local dev.
 ALLOWED_ORIGINS = "https://gg-qandv.github.io,http://localhost:5173,http://localhost:4173"
 

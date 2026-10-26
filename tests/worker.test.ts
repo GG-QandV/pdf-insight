@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { chunkPages } from '../worker/src/chunk';
 import { detectInjection } from '../worker/src/injection';
-import { parseModelJson } from '../worker/src/llm';
+import { complete, parseModelJson, providers } from '../worker/src/llm';
 import { mergePartials, type PartialResult } from '../worker/src/merge';
 import { wrapDocument } from '../worker/src/prompt';
 
@@ -83,5 +83,59 @@ describe('parseModelJson', () => {
     expect(parseModelJson('```json\n{"a":1}\n```')).toEqual({ a: 1 });
     expect(parseModelJson('Oto wynik: {"a":2} koniec')).toEqual({ a: 2 });
     expect(parseModelJson('brak')).toBeNull();
+  });
+});
+
+describe('LLM provider fallback', () => {
+  const okGemini = { candidates: [{ content: { parts: [{ text: '{"from":"gemini"}' }] } }] };
+  const okGroq = { choices: [{ message: { content: '{"from":"groq"}' } }] };
+
+  it('orders providers Gemini → Groq 1 → Groq 2', () => {
+    const list = providers({ GEMINI_API_KEY: 'g', GROQ_API_KEY: 'q1', GROQ_API_KEY_2: 'q2' });
+    expect(list.map((p) => p.model)).toEqual([
+      'gemini-2.5-flash',
+      'meta-llama/llama-4-scout-17b-16e-instruct',
+      'meta-llama/llama-4-scout-17b-16e-instruct',
+    ]);
+  });
+
+  it('falls back to the next account when the previous one is rate-limited', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        const auth = (init.headers as Record<string, string>).Authorization ?? 'gemini';
+        calls.push(auth);
+        if (auth === 'gemini' || auth === 'Bearer q1') return new Response('{}', { status: 429 });
+        return Response.json(url.includes('groq') ? okGroq : okGemini);
+      }),
+    );
+    const out = await complete(
+      { GEMINI_API_KEY: 'g', GROQ_API_KEY: 'q1', GROQ_API_KEY_2: 'q2' },
+      's',
+      [{ role: 'user', text: 't' }],
+    );
+    expect(out.text).toBe('{"from":"groq"}');
+    expect(calls).toEqual(['gemini', 'Bearer q1', 'Bearer q2']);
+    vi.unstubAllGlobals();
+  });
+
+  it('reports the last error when every provider fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 429 })),
+    );
+    await expect(
+      complete({ GROQ_API_KEY: 'q1' }, 's', [{ role: 'user', text: 't' }]),
+    ).rejects.toMatchObject({
+      code: 'AI_BUSY',
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('fails with AI_CONFIG when no key is configured', async () => {
+    await expect(complete({}, 's', [{ role: 'user', text: 't' }])).rejects.toMatchObject({
+      code: 'AI_CONFIG',
+    });
   });
 });
