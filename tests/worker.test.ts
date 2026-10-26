@@ -90,12 +90,16 @@ describe('LLM provider fallback', () => {
   const okGemini = { candidates: [{ content: { parts: [{ text: '{"from":"gemini"}' }] } }] };
   const okGroq = { choices: [{ message: { content: '{"from":"groq"}' } }] };
 
-  it('orders providers Gemini → Groq 1 → Groq 2', () => {
-    const list = providers({ GEMINI_API_KEY: 'g', GROQ_API_KEY: 'q1', GROQ_API_KEY_2: 'q2' });
+  it('orders providers Gemini → Groq 1 → Groq 2 → Groq 3', () => {
+    const list = providers({
+      GEMINI_API_KEY: 'g',
+      GROQ_API_KEY: 'q1',
+      GROQ_API_KEY_2: 'q2',
+      GROQ_API_KEY_3: 'q3',
+    });
     expect(list.map((p) => p.model)).toEqual([
       'gemini-2.5-flash',
-      'meta-llama/llama-4-scout-17b-16e-instruct',
-      'meta-llama/llama-4-scout-17b-16e-instruct',
+      ...Array(3).fill('meta-llama/llama-4-scout-17b-16e-instruct'),
     ]);
   });
 

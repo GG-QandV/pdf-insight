@@ -7,9 +7,10 @@ export interface Env {
   OPENAI_API_KEY?: string;
   OPENAI_BASE_URL?: string;
   OPENAI_MODEL?: string;
-  // Groq fallback: two accounts, used in order when the previous provider is unavailable.
+  // Groq fallback: three accounts, used in order when the previous provider is unavailable.
   GROQ_API_KEY?: string;
   GROQ_API_KEY_2?: string;
+  GROQ_API_KEY_3?: string;
   GROQ_MODEL?: string;
   ALLOWED_ORIGINS?: string;
   // Workers Rate Limiting binding (typed structurally so shared code needs no Workers types).
@@ -138,7 +139,7 @@ interface Provider {
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 const GROQ_DEFAULT_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
-/** Providers in priority order: Gemini → OpenAI-compatible → Groq account 1 → Groq account 2. */
+/** Providers in priority order: Gemini → OpenAI-compatible → Groq accounts 1, 2, 3. */
 export function providers(env: Env): Provider[] {
   const list: Provider[] = [];
   if (env.GEMINI_API_KEY) {
@@ -151,7 +152,7 @@ export function providers(env: Env): Provider[] {
     list.push({ model, call: (s, t) => openAiComplete(base, key, model, s, t) });
   }
   const groqModel = env.GROQ_MODEL ?? GROQ_DEFAULT_MODEL;
-  for (const key of [env.GROQ_API_KEY, env.GROQ_API_KEY_2]) {
+  for (const key of [env.GROQ_API_KEY, env.GROQ_API_KEY_2, env.GROQ_API_KEY_3]) {
     if (key)
       list.push({
         model: groqModel,

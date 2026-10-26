@@ -49,7 +49,7 @@ tests/          Vitest: schemat, normalizacja, zdania, chunking, scalanie, promp
   utrzymać demo przez 14+ dni.
 - **Model: Gemini 2.5 Flash** (darmowy limit, natywny tryb JSON, obsługa obrazów → OCR bez dodatkowej
   biblioteki).
-- **Fallback dostawców:** Gemini → Groq (konto 1) → Groq (konto 2). Gdy dostawca zwraca limit (429),
+- **Fallback dostawców:** Gemini → Groq (konta 1, 2, 3). Gdy dostawca zwraca limit (429),
   błąd lub timeout, Worker przekazuje żądanie następnemu; model użyty w analizie jest zapisany w `meta.model`.
 - **Jeden schemat, dwie walidacje.** `shared/schema.ts` waliduje odpowiedź modelu w Workerze; SPA waliduje
   ją ponownie przed renderowaniem (brief F-04).
@@ -99,7 +99,7 @@ Kontrole jakości: `npm run lint`, `npm run typecheck`, `npm test`, `npm run bui
 | `VITE_BASE`                                           | SPA                       | ścieżka GitHub Pages, domyślnie `/pdf-insight/`                          |
 | `GEMINI_API_KEY`                                      | Worker — **sekret**       | klucz Google AI Studio                                                   |
 | `GEMINI_MODEL`                                        | Worker (`wrangler.toml`)  | domyślnie `gemini-2.5-flash`                                             |
-| `GROQ_API_KEY` / `GROQ_API_KEY_2`                     | Worker — **sekret**       | fallback 1 i 2 (dwa konta Groq)                                          |
+| `GROQ_API_KEY` / `_2` / `_3`                          | Worker — **sekret**       | fallback: trzy konta Groq, w tej kolejności                              |
 | `GROQ_MODEL`                                          | Worker (`wrangler.toml`)  | domyślnie `meta-llama/llama-4-scout-17b-16e-instruct` (obsługuje obrazy) |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` | Worker — sekret/vars      | opcjonalnie dowolne API zgodne z OpenAI (np. OpenRouter)                 |
 | `ALLOWED_ORIGINS`                                     | Worker (`wrangler.toml`)  | lista originów CORS                                                      |

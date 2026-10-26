@@ -3,3 +3,4 @@ GEMINI_API_KEY=your-gemini-key
 # Optional fallbacks, used in this order when the previous provider is rate-limited or fails:
 GROQ_API_KEY=
 GROQ_API_KEY_2=
+GROQ_API_KEY_3=
