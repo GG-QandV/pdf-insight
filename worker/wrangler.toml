@@ -6,8 +6,9 @@ compatibility_date = "2025-09-01"
 #   GEMINI_API_KEY (primary), GROQ_API_KEY, GROQ_API_KEY_2, GROQ_API_KEY_3 (fallbacks, in this order).
 [vars]
 GEMINI_MODEL = "gemini-2.5-flash"
-# Thinking tokens for analysis calls (0 = off). Trade-off: fewer mixed-up facts vs. +3–8 s.
-GEMINI_THINKING_BUDGET = "1024"
+# Thinking tokens for analysis calls (0 = off). Tested 1024 on the test contract: dates were right in
+# 3/3 successful runs, but 2/5 runs failed validation twice (~21 s) — so it stays off for the demo.
+GEMINI_THINKING_BUDGET = "0"
 # Groq fallback model: multimodal, so scanned pages (OCR) still work after a fallback.
 GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 # CORS allow-list: the GitHub Pages origin + local dev.

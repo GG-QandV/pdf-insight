@@ -137,8 +137,10 @@ Kontrole jakości: `npm run lint`, `npm run typecheck`, `npm test`, `npm run bui
 - Kolejność tekstu w układach wielokolumnowych zależy od pdf.js — kolumny mogą się przeplatać.
 - Model może przypisać prawdziwą datę lub kwotę z dokumentu do niewłaściwego faktu (przykład z testowej
   umowy: koniec starego abonamentu podany jako 2026-03-31 zamiast 2027-03-31 — data 31.03.2026 istnieje
-  w dokumencie, ale dotyczy innego zadania). Walidacja schematu tego nie wykryje; ogranicza to
-  „myślenie” modelu (`GEMINI_THINKING_BUDGET`), ale nie eliminuje — wyniki warto zweryfikować.
+  w dokumencie, ale dotyczy innego zadania). Walidacja schematu tego nie wykryje. Test z
+  `GEMINI_THINKING_BUDGET=1024`: daty poprawne w 3/3 udanych przebiegach, ale 2 z 5 przebiegów nie
+  przeszły walidacji nawet po ponownej próbie (~21 s) — w demo „myślenie” jest więc wyłączone (`0`).
+  Wyniki warto zweryfikować.
 - Licznik zdań jest heurystyczny; nietypowe skróty mogą spowodować ponowną próbę modelu.
 - Detekcja prompt injection jest heurystyczna (wzorce PL/EN/RU/UK) — główną ochroną jest konstrukcja promptu.
 - Darmowy limit Gemini ogranicza liczbę analiz na minutę; wtedy analizę przejmuje Groq, którego modele
